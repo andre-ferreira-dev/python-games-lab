@@ -22,7 +22,7 @@ GAMES = [
         "title": "Número Secreto",
         "description": "Adivinhe o número de 1 a 100 com dicas de maior/menor.",
         "path": "/games/numero-secreto",
-        "cover": "/img/ia.png",
+        "cover": "/img/capa-numero-secreto.png",
         "badge": "Python + FastAPI",
     },
     {
@@ -30,7 +30,7 @@ GAMES = [
         "title": "Sorteador de Números",
         "description": "Sorteie números únicos dentro de um intervalo, com validações.",
         "path": "/games/sorteador",
-        "cover": "/img/ia2.png",
+        "cover": "/img/capa-sorteador.png",
         "badge": "Python + FastAPI",
     },
 
@@ -39,7 +39,7 @@ GAMES = [
     "title": "Amigo Secreto",
     "description": "Adicione amigos e sorteie os pares do amigo secreto.",
     "path": "/games/amigo-secreto",
-    "cover": "/img/imagem-presente.png",  # troque por uma capa depois se quiser
+    "cover": "/img/capa-amigo-secreto.png",  
     "badge": "Python + FastAPI",
     },
 

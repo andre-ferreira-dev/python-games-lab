@@ -6,6 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@700&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="logo-python/png" href="/img/logo-python.png">
 
   <link rel="stylesheet" href="/static/css/portal.css?v=2" />
   {% block extra_css %}{% endblock %}
@@ -13,16 +14,15 @@
 </head>
 
 <body>
-  <header class="topbar">
-  <img class="brand__logo" src="/img/logo-portal.png">
-</a>
+ <header class="topbar">
+  <div class="brand"></div> <!-- espaço à esquerda -->
 
-    <nav class="nav">
-      <a href="/">Home</a>
-      <a href="/sobre">Sobre</a>
-      <a href="https://github.com/andre-ferreira-dev" target="_blank">GitHub</a>
-    </nav>
-  </header>
+  <nav class="nav">
+    <a href="/">Home</a>
+    <a href="/sobre">Sobre</a>
+    <a href="https://github.com/andre-ferreira-dev" target="_blank">GitHub</a>
+  </nav>
+</header>
 
   <main class="page">
     {% block content %}{% endblock %}

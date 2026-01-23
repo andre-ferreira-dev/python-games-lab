@@ -31,22 +31,6 @@ body {
   backdrop-filter: none;
 }
 
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-decoration: none;
-  color: white;
-}
-
-.brand__logo {
-  height: 50px;   /* ajuste aqui o tamanho */
-  width: auto;
-  display: block;
-}
-
-
 .nav a {
   color: var(--muted);
   text-decoration: none;
