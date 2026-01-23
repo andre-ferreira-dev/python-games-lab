@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Sobre{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/about.css">
+{% endblock %}
+
+{% block content %}
+<section class="about">
+  <div class="about__container">
+
+    <div class="about__text">
+      <h1>Sobre mim</h1>
+
+      <p>
+        Olá! Meu nome é <strong>André Henrique</strong>, sou estudante de Gestão de Tecnologia da Informação,
+        apaixonado por desenvolvimento de software e aprendizado contínuo.
+      </p>
+
+      <p>
+        Os jogos disponíveis neste portal foram desenvolvidos durante meus estudos de
+        <strong>lógica de programação</strong> em <strong>Python</strong> na
+        <strong>Alura</strong>.
+      </p>
+
+      <p>
+        Decidi transformar os exercícios propostos em projetos reais, utilizando
+        <strong>Python + FastAPI</strong>, com o objetivo de construir um portfólio prático,
+        organizado e evolutivo.
+      </p>
+
+      <p>
+        Este portal representa minha evolução técnica e meu interesse em unir back-end,
+        front-end e boas práticas de desenvolvimento.
+      </p>
+
+      <a
+        class="about__link"
+        href="https://www.linkedin.com/in/andrehmf/"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        🔗 Acessar meu LinkedIn
+      </a>
+    </div>
+
+    <div class="about__photo">
+      <img
+        src="/img/minha-foto.jpg"
+        alt="Foto de André Henrique"
+      >
+    </div>
+
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,163 @@
+* { box-sizing: border-box; margin: 0; padding: 0; color: white; }
+
+.container {
+  width: 100%;
+  max-width: 1000px;
+  height: 540px;                 /* trava o tamanho pra caber na tela */
+  display: flex;
+  align-items: stretch;     /* era center */
+  justify-content: space-between;
+  border-radius: 24px;
+  border: 1px solid #1875E8;
+  box-shadow: 4px 4px 20px 0px rgba(1, 8, 14, 0.15);
+  background-image: url("/img/Ruido2.png");
+  background-size: 100% 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.container::before {
+  background-image: url("/img/code2.png");
+  background-repeat: no-repeat;
+  background-position: right;
+  content: "";
+  display: block;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.container__conteudo {
+  display: flex;
+  align-items: stretch;     /* era center */
+  position: relative;
+  width: 100%;
+  height: 100%;             /* novo: ocupa toda a altura do card */
+}
+
+.container__informacoes {
+  flex: 1;
+  padding: 1.8rem 2rem;
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;            /* novo */
+}
+
+
+.container__texto {
+  margin: 10px 0 14px;
+  display: flex;
+  flex-direction: column;
+}
+
+.container__texto-azul { color: #1875E8; display: block; }
+
+h1 {
+  font-family: 'Chakra Petch', sans-serif;
+  font-size: 48px;               /* antes 72px */
+  font-weight: 700;
+  line-height: 1.05;
+  padding: 0 0 12px;             /* antes 2rem 0 */
+}
+
+.texto__paragrafo {
+  font-family: 'Inter', sans-serif;
+  font-size: 20px;               /* antes 32px */
+  font-weight: 400;
+}
+
+.container__campo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;           /* antes 12px */
+  gap: 16px;
+}
+
+.container__input {
+  width: 120px;                  /* antes 130px */
+  height: 56px;                  /* antes 72px */
+  border-radius: 16px;
+  background-color: #FFF;
+  border: none;
+  color: #1875E8;
+  padding: 1rem;                 /* antes 2rem */
+  font-size: 20px;               /* antes 24px */
+  font-weight: 700;
+  font-family: 'Inter', sans-serif;
+}
+
+.container__botoes {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.container__botao,
+.container__botao-desabilitado {
+  border-radius: 16px;
+  padding: 12px 18px;            /* antes 16px 24px */
+  font-size: 18px;               /* antes 24px */
+  width: 100%;
+  font-weight: 800;
+  border: none;
+}
+
+.container__botao {
+  background: #1875E8;
+  cursor: pointer;
+}
+
+.container__botao-desabilitado {
+  background: #6f6f70;
+  cursor: not-allowed;
+}
+
+.container__imagem-pessoa {
+  max-height: 380px;             /* limita a imagem pra não estourar o card */
+  height: auto;
+  margin-right: 18px;
+}
+
+@media screen and (max-width: 1250px) {
+  .container { height: auto; padding: 18px; }
+  .container__imagem-pessoa { display: none; }
+  h1 { font-size: 42px; }
+}
+
+/* =========================
+   RESULTADO COM SCROLL
+========================= */
+#resultado {
+  margin-top: -100x;        /* 🔥 empurra o resultado pro fundo */
+  height: 220px;
+  max-height: 220px;
+  overflow-y: auto;
+
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+
+  word-break: break-word;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+
+#resultado::-webkit-scrollbar {
+  width: 8px;
+}
+#resultado::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.18);
+  border-radius: 999px;
+}
+#resultado::-webkit-scrollbar-track {
+  background: rgba(255,255,255,.06);
+}
+
+

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@700&family=Inter:wght@400;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="/static/css/portal.css?v=2" />
+  {% block extra_css %}{% endblock %}
+  <title>{% block title %}Python Games Lab{% endblock %}</title>
+</head>
+
+<body>
+  <header class="topbar">
+  <img class="brand__logo" src="/img/logo-portal.png">
+</a>
+
+    <nav class="nav">
+      <a href="/">Home</a>
+      <a href="/sobre">Sobre</a>
+      <a href="https://github.com/andre-ferreira-dev" target="_blank">GitHub</a>
+    </nav>
+  </header>
+
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <span>Developed by André Henrique Marfin Ferreira</span>
+  </footer>
+
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

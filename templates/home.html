@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Python Games Lab{% endblock %}
+
+{% block content %}
+  <section class="hero">
+    <h1>Escolha um jogo</h1>
+    <p>Portal de games do meu portfólio — feito com Python + FastAPI.</p>
+  </section>
+
+  <section class="grid">
+    {% for game in games %}
+      <a class="card" href="{{ game.path }}">
+        <div class="card__cover" style="background-image:url('{{ game.cover }}')"></div>
+        <div class="card__body">
+          <div class="card__top">
+            <h2>{{ game.title }}</h2>
+            <span class="badge">{{ game.badge }}</span>
+          </div>
+          <p>{{ game.description }}</p>
+          <span class="play">Jogar →</span>
+        </div>
+      </a>
+    {% endfor %}
+
+    <!-- Card “Em breve” (pra já dar cara de portal crescendo) -->
+    <div class="card card--soon">
+      <div class="card__cover"></div>
+      <div class="card__body">
+        <div class="card__top">
+          <h2>Próximo jogo</h2>
+          <span class="badge badge--soon">Em breve</span>
+        </div>
+        <p>Novos jogos serão adicionados aqui.</p>
+      </div>
+    </div>
+  </section>
+{% endblock %}

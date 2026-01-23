@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Truco{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/truco.css?v=10">
+{% endblock %}
+
+{% block content %}
+<a class="back" href="/">← Voltar</a>
+
+<div class="mesa">
+
+  <!-- TOPO -->
+  <div class="topo">
+    <div class="info-carta">
+      <span class="label">Vira</span>
+      <div id="viraCarta" class="carta-slot vira"></div>
+    </div>
+
+    <div class="placar">
+      Você <span id="pUser">0</span> | Bot <span id="pBot">0</span>
+    </div>
+  </div>
+
+  <!-- CENTRO DA MESA -->
+  <div class="mesa-centro">
+    <div class="carta-bot" id="cartaBot"></div>
+    <div class="carta-user" id="cartaUser"></div>
+  </div>
+
+  <!-- MÃO -->
+  <div class="mao" id="mao"></div>
+
+  <!-- CONTROLE -->
+  <div class="controle">
+    <div class="meta">
+      <span id="maoValorTxt">Mão valendo 1</span>
+    </div>
+
+    <div class="resultado" id="resultado">
+      Clique em “Novo jogo”
+    </div>
+
+    <div class="acoes">
+      <button id="btnTruco" class="btn-sec" type="button">Pedir Truco</button>
+      <button id="btnAceitar" class="btn-sec" type="button">Aceitar</button>
+      <button id="btnCorrer" class="btn-sec danger" type="button">Correr</button>
+    </div>
+
+    <button id="btnNovo" type="button">Novo jogo</button>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/truco.js" defer></script>
+{% endblock %}

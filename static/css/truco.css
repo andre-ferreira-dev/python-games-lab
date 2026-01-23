@@ -1,0 +1,282 @@
+body {
+  background: radial-gradient(circle at center, #0f1d3a, #050a18);
+  color: white;
+  font-family: Inter, sans-serif;
+  margin: 0;
+
+  overflow-x: hidden; /* ✅ mata a barra horizontal */
+}
+
+
+/* =========================
+   MESA (BASE)
+========================= */
+.mesa {
+  max-width: 1100px;
+  margin: auto;
+  padding: 8px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+
+  min-height: auto;
+  padding-top: 80px;
+
+  position: relative;
+}
+
+/* =========================
+   TOPO (VIRA + PLACAR FIXOS)
+========================= */
+.topo {
+  position: absolute;
+  top: 25px;
+  left: 40px;
+  right: 40px;
+
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  z-index: 10;
+}
+
+.label {
+  font-size: 14px;
+  opacity: .85;
+  margin-bottom: 6px;
+  display: block;
+}
+
+/* =========================
+   VIRA
+========================= */
+.carta-slot.vira {
+  width: 170px;
+  height: 240px;
+  margin-left: -10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.carta-slot.vira img {
+  width: 150px;
+  height: auto;
+  border-radius: 0px;
+  box-shadow: 0 10px 28px rgba(0,0,0,.75);
+  transform: translate(-60px, 10px);
+}
+
+/* =========================
+   PLACAR
+========================= */
+.placar {
+  font-size: 18px;
+  font-weight: 900;
+  margin-top: -250px;
+  margin-left: 20px;
+  line-height: 1;
+}
+
+/* =========================
+   CENTRO DA MESA
+========================= */
+.mesa-centro {
+  position: relative;
+  flex: 0;
+
+  height: 160px;
+  min-height: 160px;
+  margin-top: 270px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* cartas da rodada */
+.carta-bot,
+.carta-user {
+  margin-top: -230px;
+  top: -150px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.carta-bot { top: 0; }
+.carta-user { bottom: 0; }
+
+.carta-bot img,
+.carta-user img {
+  width: clamp(135px, 15vh, 190px);
+  border-radius: 0px;
+  box-shadow: 0 10px 26px rgba(0,0,0,.65);
+  animation: entrar .35s ease-out;
+}
+
+/* =========================
+   ANIMAÇÃO
+========================= */
+@keyframes entrar {
+  from { transform: translateY(20px) scale(.9); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* =========================
+   MÃO DO JOGADOR
+========================= */
+.mao {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+
+  transform: translateY(-200px) translateX(450px);
+  margin-bottom: 20px;
+}
+
+
+.card {
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: transform .25s ease, opacity .25s ease;
+}
+
+.card img {
+  width: clamp(135px, 15vh, 190px);
+  border-radius: 0px;
+  box-shadow: 0 10px 26px rgba(0,0,0,.65);
+}
+
+.card:hover { transform: translateY(-18px) scale(1.08); }
+
+.card.jogada {
+  opacity: 0;
+  transform: translateY(-60px) scale(.9);
+  pointer-events: none;
+}
+
+/* =========================
+   CONTROLE
+========================= */
+.controle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 200px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  z-index: 50;         /* ✅ sobe a camada do controle */
+  pointer-events: auto; /* ✅ garante clique */
+}
+
+
+
+.meta {
+  font-size: 13px;
+  opacity: .85;
+  margin-top: -170px;
+}
+
+.resultado {
+  font-size: 17px;
+  text-align: center;
+  margin-top: 10px;
+  min-height: 24px;
+}
+
+/* =========================
+   BOTÕES
+========================= */
+#btnNovo {
+  padding: 14px 32px;
+  border: none;
+  border-radius: 16px;
+  background-color: #1875E8;
+  color: #fff !important;
+  -webkit-text-fill-color: #fff !important;
+  font-weight: 900;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: filter 0.2s ease, opacity 0.2s ease;
+  margin-top: 16px;
+}
+
+#btnNovo:hover { filter: brightness(1.12); }
+
+.acoes {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn-sec {
+  padding: 10px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(255,255,255,.06);
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  transition: filter .2s ease, opacity .2s ease;
+}
+
+.btn-sec:hover { filter: brightness(1.10); }
+
+.btn-sec.danger {
+  background: rgba(255,80,80,.12);
+  border-color: rgba(255,80,80,.28);
+}
+
+button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+/* =========================
+   ANTI-CORTE (overflow)
+========================= */
+.mesa,
+.topo,
+.mesa-centro,
+.mao,
+.carta-slot,
+.carta-slot.vira,
+.carta-bot,
+.carta-user,
+.card {
+  overflow: visible !important;
+}
+
+.carta-bot,
+.carta-user,
+.card img,
+.carta-bot img,
+.carta-user img,
+.carta-slot.vira img {
+  will-change: transform;
+}
+
+.carta-slot.vira img {
+  display: block;
+  height: auto;
+  max-width: none;
+}
+
+.card img,
+.carta-bot img,
+.carta-user img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
