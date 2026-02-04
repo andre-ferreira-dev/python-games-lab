@@ -2,7 +2,7 @@
 {% block title %}Sorteador de Números{% endblock %}
 
 {% block extra_css %}
-  <link rel="stylesheet" href="/static/css/sorteador.css?v=2" />
+  <link rel="stylesheet" href="/static/css/sorteador.css?v=3" />
 {% endblock %}
 
 {% block content %}
@@ -35,9 +35,10 @@
           <button id="btn-reiniciar" class="container__botao-desabilitado" disabled>Reiniciar</button>
         </div>
 
-        <div class="container__texto" id="resultado">
+        <div class="resultado" id="resultado">
           <label class="texto__paragrafo">Números sorteados: nenhum até agora</label>
         </div>
+
       </div>
 
       <img src="/img/ia2.png" alt="Uma pessoa com capacete de astronauta" class="container__imagem-pessoa" />

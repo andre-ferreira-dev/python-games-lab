@@ -3,7 +3,7 @@ const btnReiniciar = document.getElementById("btn-reiniciar");
 
 function setResultado(texto) {
   document.getElementById("resultado").innerHTML =
-    `<label class="texto__paragrafo">${texto}</label>`;
+    `<p class="texto__paragrafo" style="margin:0;">${texto}</p>`;
 }
 
 function habilitarReiniciar(habilitar) {

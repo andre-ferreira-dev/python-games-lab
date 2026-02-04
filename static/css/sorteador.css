@@ -133,12 +133,14 @@ h1 {
 /* =========================
    RESULTADO COM SCROLL
 ========================= */
-#resultado {
-  margin-top: 15px;        /* 🔥 empurra o resultado pro fundo */
-  height: 350px;
+.resultado{
+  margin-top: 12px;
+
+  min-height: 50px;
+  max-height: 120px;
   overflow-y: auto;
-  
-  padding: 18px 20px;
+
+  padding: 10px 20px; /* se ainda achar “espaço”, baixa pra 6px */
   border-radius: 14px;
   background: rgba(255,255,255,.06);
   border: 1px solid rgba(255,255,255,.12);
@@ -148,16 +150,10 @@ h1 {
   line-height: 1.35;
 }
 
-
-#resultado::-webkit-scrollbar {
-  width: 8px;
-}
-#resultado::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,.18);
-  border-radius: 999px;
-}
-#resultado::-webkit-scrollbar-track {
-  background: rgba(255,255,255,.06);
+.resultado label{
+  margin: 0;
+  padding: 0;
+  display: block;
 }
 
 

@@ -6,6 +6,33 @@ const btnAdicionar = document.getElementById("btn-adicionar");
 const btnSortear = document.getElementById("btn-sortear");
 const btnReiniciar = document.getElementById("btn-reiniciar");
 
+// ===== Modal Editar (custom) =====
+const editModal = document.getElementById("edit-modal");
+const editInput = document.getElementById("edit-input");
+const editCancel = document.getElementById("edit-cancel");
+const editSave = document.getElementById("edit-save");
+
+let editId = null;
+
+function openEditModal(id, currentName) {
+  editId = id;
+
+  editModal.classList.add("is-open");
+  editModal.setAttribute("aria-hidden", "false");
+
+  editInput.value = currentName || "";
+  setTimeout(() => {
+    editInput.focus();
+    editInput.select();
+  }, 0);
+}
+
+function closeEditModal() {
+  editModal.classList.remove("is-open");
+  editModal.setAttribute("aria-hidden", "true");
+  editId = null;
+}
+
 let amigosCache = []; // [{id, name}, ...]
 
 function escapeHtml(str) {
@@ -30,8 +57,17 @@ function renderAmigos(amigos) {
       (a) => `
       <span class="chip" data-id="${a.id}">
         <span class="chip__name">${escapeHtml(a.name)}</span>
-        <button class="chip__btn chip__btn--edit" type="button" title="Editar">Editar</button>
-        <button class="chip__btn chip__btn--del" type="button" title="Remover">×</button>
+
+        <span class="chip__actions">
+          <button class="chip__btn chip__btn--edit" type="button" title="Editar" aria-label="Editar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M3 17.25V21h3.75L17.8 9.95l-3.75-3.75L3 17.25Z" fill="currentColor"/>
+              <path d="M20.7 7.04c.39-.39.39-1.02 0-1.41L18.37 3.3a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.82-1.84Z" fill="currentColor"/>
+            </svg>
+          </button>
+
+          <button class="chip__btn chip__btn--del" type="button" title="Remover" aria-label="Remover">×</button>
+        </span>
       </span>
     `
     )
@@ -43,7 +79,9 @@ function renderSorteio(pares) {
     listaSorteio.textContent = "Faça o sorteio para ver os pares";
     return;
   }
-  listaSorteio.innerHTML = pares.map((p) => `${escapeHtml(p.de)} --> ${escapeHtml(p.para)}`).join("<br>");
+  listaSorteio.innerHTML = pares
+    .map((p) => `${escapeHtml(p.de)} → ${escapeHtml(p.para)}`)
+    .join("<br>");
 }
 
 async function carregarEstado() {
@@ -71,6 +109,7 @@ async function adicionar() {
     renderAmigos(data.amigos);
     input.value = "";
     input.focus();
+    renderSorteio([]); // opcional: limpa sorteio quando lista muda
   } catch {
     alert("Falha de conexão com o servidor.");
   }
@@ -97,16 +136,21 @@ async function remover(friendId) {
   }
 }
 
-async function editar(friendId) {
+// Agora: abre modal (não usa prompt)
+function editar(friendId) {
   const atual = amigosCache.find((a) => a.id === friendId);
   if (!atual) return;
+  openEditModal(friendId, atual.name);
+}
 
-  const novo = prompt("Editar nome:", atual.name);
-  if (novo === null) return; // cancelou
+// Salva a edição do modal
+async function salvarEdicao() {
+  if (!editId) return;
 
-  const nome = novo.trim();
+  const nome = editInput.value.trim();
   if (!nome) {
     alert("Digite um nome válido.");
+    editInput.focus();
     return;
   }
 
@@ -114,7 +158,7 @@ async function editar(friendId) {
     const resp = await fetch("/api/amigo-secreto/editar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: friendId, nome }),
+      body: JSON.stringify({ id: editId, nome }),
     });
 
     const data = await resp.json();
@@ -125,6 +169,7 @@ async function editar(friendId) {
 
     renderAmigos(data.amigos);
     renderSorteio([]); // limpa sorteio (lista mudou)
+    closeEditModal();
   } catch {
     alert("Falha de conexão com o servidor.");
   }
@@ -165,6 +210,7 @@ async function reiniciar() {
   }
 }
 
+// ===== Eventos principais =====
 btnAdicionar.addEventListener("click", adicionar);
 btnSortear.addEventListener("click", sortear);
 btnReiniciar.addEventListener("click", reiniciar);
@@ -173,7 +219,7 @@ input.addEventListener("keydown", (e) => {
   if (e.key === "Enter") adicionar();
 });
 
-// Delegação de eventos para os chips
+// Delegação de eventos para chips (edit/del funciona com SVG)
 listaAmigos.addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
@@ -181,11 +227,32 @@ listaAmigos.addEventListener("click", (e) => {
   const id = chip.getAttribute("data-id");
   if (!id) return;
 
-  if (e.target.classList.contains("chip__btn--del")) {
+  if (e.target.closest(".chip__btn--del")) {
     remover(id);
-  } else if (e.target.classList.contains("chip__btn--edit")) {
-    editar(id);
+    return;
   }
+
+  if (e.target.closest(".chip__btn--edit")) {
+    editar(id);
+    return;
+  }
+});
+
+// ===== Eventos do Modal =====
+editCancel.addEventListener("click", closeEditModal);
+editSave.addEventListener("click", salvarEdicao);
+
+// Fechar clicando fora (overlay tem data-close="true")
+editModal.addEventListener("click", (e) => {
+  if (e.target.dataset.close === "true") closeEditModal();
+});
+
+// Enter salva / Esc fecha (apenas quando modal aberto)
+document.addEventListener("keydown", (e) => {
+  if (!editModal.classList.contains("is-open")) return;
+
+  if (e.key === "Escape") closeEditModal();
+  if (e.key === "Enter") salvarEdicao();
 });
 
 carregarEstado();
