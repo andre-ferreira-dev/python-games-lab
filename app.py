@@ -326,504 +326,690 @@ def sobre(request: Request):
         "about.html",
         {"request": request}
     )
+
 # =========================
-# ✅ TRUCO COMPLETO (1/3/6/9/12)
+# 🃏 TRUCO (PAULISTA SIMPLIFICADO) — TURNO 100% CORRETO + TRUCO/6/9/12 + MANILHA CORRETA
 # =========================
 
-TRUCO_NAIPES = ["♣", "♥", "♠", "♦"]
-TRUCO_ORDEM = ["Q", "J", "K", "A", "2", "3"]
-TRUCO_FORCA_MANILHA = {"♣": 1, "♥": 2, "♠": 3, "♦": 4}
+from fastapi import Request
+from fastapi.responses import HTMLResponse, JSONResponse
+import random
 
-TRUCO_VALORES = [1, 3, 6, 9, 12]
+TRUCO_NAIPES = ["♣", "♥", "♠", "♦"]  # usado só para montar as cartas/arquivos
+TRUCO_ORDEM = ["Q", "J", "K", "A", "2", "3"]  # ranking base (sem manilha)
+TRUCO_VALORES = [1, 3, 6, 9, 12]  # escada do truco
+
+# ✅ Truco Paulista (manilha): ZAP(♣) > COPAS(♥) > ESPADAS(♠) > OUROS(♦)
+# Para comparar: número MAIOR = mais forte
+TRUCO_FORCA_MANILHA = {"♦": 1, "♠": 2, "♥": 3, "♣": 4}
+
+
+# ⭐ ROTA DA PÁGINA
+@app.get("/games/truco", response_class=HTMLResponse)
+def truco_page(request: Request):
+    return templates.TemplateResponse("games/truco.html", {"request": request})
+
+
+# ----------------- FUNÇÕES BASE -----------------
 
 def prox_valor(atual: int):
     i = TRUCO_VALORES.index(atual)
     return TRUCO_VALORES[i + 1] if i < len(TRUCO_VALORES) - 1 else None
 
 def truco_parse(carta: str):
+    # carta é tipo "Q♣", "3♦"
     return carta[:-1], carta[-1]
 
 def truco_proxima(rank: str):
+    # manilha = próxima do vira
     return TRUCO_ORDEM[(TRUCO_ORDEM.index(rank) + 1) % len(TRUCO_ORDEM)]
 
 def truco_baralho():
-    baralho = [f"{r}{n}" for r in TRUCO_ORDEM for n in TRUCO_NAIPES]
-    random.shuffle(baralho)
-    return baralho
+    # baralho limpo (24 cartas)
+    d = [f"{r}{n}" for r in TRUCO_ORDEM for n in TRUCO_NAIPES]
+    random.shuffle(d)
+    return d
 
-def truco_poder(carta: str, manilha: str):
+def truco_poder(carta: str, manilha_rank: str):
     r, n = truco_parse(carta)
-
-    if r == manilha:
+    if r == manilha_rank:
+        # manilha sempre ganha de qualquer não-manilha
         return (100, TRUCO_FORCA_MANILHA[n])
-
+    # quanto maior o índice, mais forte (Q mais fraco ... 3 mais forte)
     return (TRUCO_ORDEM.index(r), 0)
 
-def truco_comparar(a: str, b: str, manilha: str):
-    pa = truco_poder(a, manilha)
-    pb = truco_poder(b, manilha)
-    if pa > pb:
-        return 1
-    if pa < pb:
-        return -1
-    return 0
+def truco_comparar(a: str, b: str, manilha_rank: str):
+    pa = truco_poder(a, manilha_rank)
+    pb = truco_poder(b, manilha_rank)
+    return (pa > pb) - (pa < pb)
 
-def truco_maior_da_mao(mao: list[str], manilha: str):
-    if not mao:
-        return None
-    return max(mao, key=lambda c: truco_poder(c, manilha))
 
-def _truco_avaliar_forca_bot(g: dict) -> float:
-    mao_bot = g.get("mao_bot", [])
-    manilha = g.get("manilha")
-    if not mao_bot or not manilha:
-        return 0.0
+# ----------------- IA DO BOT -----------------
 
-    maior = truco_maior_da_mao(mao_bot, manilha)
-    if not maior:
-        return 0.0
+def bot_escolher_resposta(mao_bot, carta_user, manilha_rank):
+    """
+    Bot tenta ganhar gastando o mínimo:
+    - Se tiver alguma que ganha, joga a menor que ganha
+    - Senão, joga a menor da mão
+    """
+    ganhadoras = [c for c in mao_bot if truco_comparar(c, carta_user, manilha_rank) == 1]
+    if ganhadoras:
+        return min(ganhadoras, key=lambda c: truco_poder(c, manilha_rank))
+    return min(mao_bot, key=lambda c: truco_poder(c, manilha_rank))
 
-    p = truco_poder(maior, manilha)
+def bot_escolher_torno(mao_bot, manilha_rank):
+    """
+    Quando o bot vai 'tornar' (jogar primeiro na rodada),
+    joga uma carta mediana/baixa pra guardar as fortes.
+    """
+    ordenadas = sorted(mao_bot, key=lambda c: truco_poder(c, manilha_rank))
+    if len(ordenadas) == 3:
+        return ordenadas[1]
+    return ordenadas[0]
 
-    if p[0] == 100:
-        return min(1.0, 0.75 + (p[1] * 0.06))
+def bot_deve_pedir_truco(g):
+    """
+    Bot só pode pedir na vez dele, antes de jogar.
+    Estratégia simples: chance de pedir se tiver carta forte (manilha ou 3).
+    """
+    if g["pedido"] is not None:
+        return False
+    if g["mao_valor"] >= 12:
+        return False
+    if g["vez"] != "bot":
+        return False
+    if g["carta_bot_mesa"] is not None:
+        return False
 
-    idx = p[0]
-    return max(0.0, min(1.0, (idx / 5) * 0.65))
+    fortes = 0
+    for c in g["mao_bot"]:
+        r, _ = truco_parse(c)
+        if r == g["manilha"]:
+            fortes += 2
+        elif r == "3":
+            fortes += 1
 
-def novo_estado():
+    if fortes >= 2:
+        chance = 0.35
+    elif fortes == 1:
+        chance = 0.18
+    else:
+        chance = 0.06
+
+    return random.random() < chance
+
+def bot_responde_pedido(g, novo_valor):
+    """
+    Bot decide se aceita, corre ou aumenta.
+    """
+    proximo = prox_valor(novo_valor)
+    pode_aumentar = proximo is not None
+
+    if novo_valor >= 9:
+        p_correr = 0.28
+        p_aumentar = 0.10 if pode_aumentar else 0.0
+    elif novo_valor >= 6:
+        p_correr = 0.18
+        p_aumentar = 0.18 if pode_aumentar else 0.0
+    else:
+        p_correr = 0.10
+        p_aumentar = 0.22 if pode_aumentar else 0.0
+
+    x = random.random()
+    if x < p_correr:
+        return "correr"
+    if x < p_correr + p_aumentar:
+        return "aumentar"
+    return "aceitar"
+
+
+# ----------------- ESTADO DO JOGO -----------------
+
+def novo_estado(placar_user=0, placar_bot=0, mao_inicial="user"):
     deck = truco_baralho()
     vira = deck.pop()
     manilha = truco_proxima(truco_parse(vira)[0])
 
-    return {
+    g = {
         "deck": deck,
         "vira": vira,
         "manilha": manilha,
+
         "mao_user": [deck.pop() for _ in range(3)],
         "mao_bot": [deck.pop() for _ in range(3)],
 
-        "placar_user": 0,
-        "placar_bot": 0,
+        "placar_user": placar_user,
+        "placar_bot": placar_bot,
 
-        "rodada_user": 0,
-        "rodada_bot": 0,
-        "jogadas_na_mao": 0,
+        "tricks": [],                 # "user" / "bot" / "tie"
+        "mao_inicial": mao_inicial,   # quem é "mão" desta mão
+        "vez": mao_inicial,           # quem joga agora (se "bot", ele pode tornar)
+        "carta_bot_mesa": None,       # quando bot torna, carta fica na mesa
 
-        "vencedor_rodada1": None,
-        "empate_rodada1": False,
-        "vantagem_empate1": None,
+        # ✅ quem iniciou a rodada atual (importante para empates)
+        "rodada_iniciador": mao_inicial,
 
-        # ✅ truco (valor e pendência)
         "mao_valor": 1,
-        # pedido_pendente: {"por":"user"/"bot", "base":valor_atual, "valor":valor_pedido}
-        "pedido_pendente": None,
-
+        "pedido": None,               # {"por":"bot"/"user", "base":X, "valor":Y}
         "finalizado": False
     }
+    return g
 
-def _nova_mao_mantendo_placar(request: Request, g: dict):
-    novo = novo_estado()
-    novo["placar_user"] = g["placar_user"]
-    novo["placar_bot"] = g["placar_bot"]
-    request.session["truco"] = novo
-    return novo
+def ensure_truco(request: Request):
+    if "truco" not in request.session or not isinstance(request.session["truco"], dict):
+        request.session["truco"] = novo_estado()
 
-def _aplicar_corrida(request: Request, g: dict, ganhador: str, pontos: int):
-    if ganhador == "user":
-        g["placar_user"] += pontos
-    else:
-        g["placar_bot"] += pontos
+def placar_list(g):
+    return [g["placar_user"], g["placar_bot"]]
 
-    g["pedido_pendente"] = None
+def fim_de_jogo(g):
+    return g["placar_user"] >= 12 or g["placar_bot"] >= 12
 
-    if g["placar_user"] >= 12 or g["placar_bot"] >= 12:
-        g["finalizado"] = True
-        request.session["truco"] = g
-        return {"fim_jogo": True, "nova_mao": False, "g": g}
+def mensagem_fim(g):
+    if g["placar_user"] >= 12:
+        return "FIM DE JOGO — Você venceu! 🏆"
+    return "FIM DE JOGO — Bot venceu!"
 
-    novo = _nova_mao_mantendo_placar(request, g)
-    return {"fim_jogo": False, "nova_mao": True, "g": novo}
-
-def _bot_responder_pedido(request: Request, g: dict, base: int, valor_pedido: int):
+def vencedor_da_mao(tricks, mao_inicial):
     """
-    Bot recebe um pedido (base -> valor_pedido) e decide:
-    - correr (quem pediu ganha base)
-    - aceitar (mão vale valor_pedido)
-    - aumentar (mão vira valor_pedido e pendente próximo)
+    Regras resumidas:
+    - Quem ganhar 2 rodadas vence a mão
+    - Empate + vitória em alguma das duas primeiras já decide
+    - 3 empates => mão (mao_inicial) vence
     """
-    forca = _truco_avaliar_forca_bot(g)
-    roll = random.random()
+    u = tricks.count("user")
+    b = tricks.count("bot")
+    t = tricks.count("tie")
 
-    # corre mais quando fraco
-    chance_correr = 0.55 - (forca * 0.40)
+    if u >= 2:
+        return "user"
+    if b >= 2:
+        return "bot"
 
-    # aumenta mais quando forte e se existir próximo
-    prox = prox_valor(valor_pedido)
-    pode_aumentar = prox is not None
-    chance_aumentar = 0.10 + (forca * 0.35)
+    if len(tricks) >= 2 and t >= 1:
+        if u == 1 and b == 0:
+            return "user"
+        if b == 1 and u == 0:
+            return "bot"
 
-    if roll < chance_correr:
-        # bot corre => quem pediu (user) ganha base
-        res = _aplicar_corrida(request, g, "user", base)
-        gg = res["g"]
-        return JSONResponse({
-            "ok": True,
-            "acao": "bot_correu",
-            "mensagem": f"Bot correu! Você ganhou {base} ponto(s).",
-            "nova_mao": res["nova_mao"],
-            "fim_jogo": res["fim_jogo"],
-            "vira": gg.get("vira"),
-            "manilha": gg.get("manilha"),
-            "mao_user": gg.get("mao_user"),
-            "placar": [gg["placar_user"], gg["placar_bot"]],
-            "mao_valor": gg.get("mao_valor", 1),
-            "pedido": gg.get("pedido_pendente"),
-        })
+    if len(tricks) == 3:
+        if u > b:
+            return "user"
+        if b > u:
+            return "bot"
+        return mao_inicial
 
-    if pode_aumentar and roll < chance_correr + chance_aumentar:
-        # bot aumenta: aceita valor_pedido e pede prox
-        g["mao_valor"] = valor_pedido
-        g["pedido_pendente"] = {"por": "bot", "base": valor_pedido, "valor": prox}
-        request.session["truco"] = g
-        return JSONResponse({
-            "ok": True,
-            "acao": "bot_aumentou",
-            "mensagem": f"Bot pediu {prox}! Aceita, corre ou aumenta?",
-            "placar": [g["placar_user"], g["placar_bot"]],
-            "mao_valor": g["mao_valor"],
-            "pedido": g["pedido_pendente"],
-        })
+    return None
 
-    # aceita
-    g["mao_valor"] = valor_pedido
-    g["pedido_pendente"] = None
-    request.session["truco"] = g
-    return JSONResponse({
-        "ok": True,
-        "acao": "bot_aceitou",
-        "mensagem": f"Bot aceitou! Mão valendo {valor_pedido}.",
-        "placar": [g["placar_user"], g["placar_bot"]],
-        "mao_valor": g["mao_valor"],
-        "pedido": None,
-    })
+def iniciar_nova_mao(request: Request, mao_inicial: str):
+    g_old = request.session["truco"]
+    pu, pb = g_old["placar_user"], g_old["placar_bot"]
+    request.session["truco"] = novo_estado(placar_user=pu, placar_bot=pb, mao_inicial=mao_inicial)
+
+def bot_torna_se_precisar(g):
+    """
+    Se for vez do bot, sem pedido pendente, ele pode:
+    - pedir truco (antes de jogar)
+    - ou tornar (jogar carta na mesa)
+    Retorna a carta tornada (ou None).
+    """
+    if g["finalizado"]:
+        return None
+    if g["pedido"] is not None:
+        return None
+    if g["vez"] != "bot":
+        return None
+
+    # pedir truco antes de jogar
+    if bot_deve_pedir_truco(g):
+        proximo = prox_valor(g["mao_valor"])
+        if proximo:
+            g["pedido"] = {"por": "bot", "base": g["mao_valor"], "valor": proximo}
+            # continua sendo vez do bot, mas aguardando resposta do user
+            return None
+
+    # se já tem carta na mesa, só garante que a vez é do user
+    if g["carta_bot_mesa"] is not None:
+        g["vez"] = "user"
+        return g["carta_bot_mesa"]
+
+    if not g["mao_bot"]:
+        return None
+
+    carta = bot_escolher_torno(g["mao_bot"], g["manilha"])
+    g["mao_bot"].remove(carta)
+    g["carta_bot_mesa"] = carta
+
+    # ✅ rodada foi iniciada pelo bot
+    g["rodada_iniciador"] = "bot"
+
+    # agora você responde
+    g["vez"] = "user"
+    return carta
 
 
-@app.get("/games/truco", response_class=HTMLResponse)
-def truco_page(request: Request):
-    return templates.TemplateResponse("games/truco.html", {"request": request})
-
+# ----------------- NOVO JOGO -----------------
 
 @app.get("/api/truco/new")
 def truco_new(request: Request):
-    request.session["truco"] = novo_estado()
+    request.session["truco"] = novo_estado(placar_user=0, placar_bot=0, mao_inicial="user")
     g = request.session["truco"]
 
-    return JSONResponse({
+    return {
         "ok": True,
         "vira": g["vira"],
-        "manilha": g["manilha"],
         "mao_user": g["mao_user"],
-        "placar": [g["placar_user"], g["placar_bot"]],
+        "placar": placar_list(g),
+        "vez": g["vez"],
         "mao_valor": g["mao_valor"],
-        "pedido": g["pedido_pendente"],
-    })
+        "pedido": g["pedido"],
+        "manilha": g["manilha"],
+        "fim_jogo": False,
+        "bot_iniciou": None
+    }
 
 
-# =========================
-# ✅ PEDIR / AUMENTAR (USER)
-# =========================
+# ----------------- PEDIR TRUCO (USER) -----------------
 
 @app.post("/api/truco/pedir")
 def truco_pedir(request: Request):
-    g = request.session.get("truco")
-    if not g:
-        return JSONResponse({"ok": False, "erro": "Jogo não iniciado."}, status_code=400)
-    if g.get("finalizado"):
-        return JSONResponse({"ok": False, "erro": "Jogo finalizado."}, status_code=400)
-    if g.get("pedido_pendente"):
-        return JSONResponse({"ok": False, "erro": "Existe um pedido pendente. Responda (aceitar/correr/aumentar)."}, status_code=400)
+    ensure_truco(request)
+    g = request.session["truco"]
 
-    atual = int(g.get("mao_valor", 1))
-    nxt = prox_valor(atual)
-    if not nxt:
-        return JSONResponse({"ok": False, "erro": "A mão já está valendo 12."}, status_code=400)
+    if g["finalizado"] or fim_de_jogo(g):
+        g["finalizado"] = True
+        request.session["truco"] = g
+        return {"ok": True, "fim_jogo": True, "placar": placar_list(g), "vez": g["vez"], "mensagem": mensagem_fim(g)}
 
-    # user pediu: bot responde agora
-    g["pedido_pendente"] = {"por": "user", "base": atual, "valor": nxt}
-    # bot responde (correr/aceitar/aumentar)
-    return _bot_responder_pedido(request, g, base=atual, valor_pedido=nxt)
+    if g["pedido"] is not None:
+        return JSONResponse({"ok": False, "erro": "Já existe um pedido pendente."}, 400)
 
+    if g["vez"] != "user":
+        return JSONResponse({"ok": False, "erro": "Você só pode pedir na sua vez."}, 400)
+
+    proximo = prox_valor(g["mao_valor"])
+    if not proximo:
+        return JSONResponse({"ok": False, "erro": "Mão já está no máximo."}, 400)
+
+    acao = bot_responde_pedido(g, proximo)
+
+    if acao == "correr":
+        g["placar_user"] += g["mao_valor"]
+
+        if fim_de_jogo(g):
+            g["finalizado"] = True
+            request.session["truco"] = g
+            return {"ok": True, "fim_jogo": True, "placar": placar_list(g), "vez": g["vez"], "mensagem": mensagem_fim(g)}
+
+        iniciar_nova_mao(request, mao_inicial="user")
+        g2 = request.session["truco"]
+        bot_iniciou = bot_torna_se_precisar(g2)
+        request.session["truco"] = g2
+
+        return {
+            "ok": True,
+            "mensagem": f"Bot correu! Você ganhou {g['mao_valor']} ponto(s).",
+            "nova_mao": True,
+            "vira": g2["vira"],
+            "mao_user": g2["mao_user"],
+            "placar": placar_list(g2),
+            "mao_valor": g2["mao_valor"],
+            "pedido": g2["pedido"],
+            "manilha": g2["manilha"],
+            "vez": g2["vez"],
+            "fim_jogo": False,
+            "bot_iniciou": bot_iniciou
+        }
+
+    if acao == "aceitar":
+        g["mao_valor"] = proximo
+        request.session["truco"] = g
+        return {
+            "ok": True,
+            "mensagem": f"Bot aceitou! Mão valendo {g['mao_valor']}.",
+            "placar": placar_list(g),
+            "mao_valor": g["mao_valor"],
+            "pedido": g["pedido"],
+            "manilha": g["manilha"],
+            "vez": g["vez"],
+            "fim_jogo": False,
+            "bot_iniciou": None
+        }
+
+    proximo2 = prox_valor(proximo)
+    if not proximo2:
+        g["mao_valor"] = proximo
+        request.session["truco"] = g
+        return {
+            "ok": True,
+            "mensagem": f"Bot aceitou! Mão valendo {g['mao_valor']}.",
+            "placar": placar_list(g),
+            "mao_valor": g["mao_valor"],
+            "pedido": g["pedido"],
+            "manilha": g["manilha"],
+            "vez": g["vez"],
+            "fim_jogo": False,
+            "bot_iniciou": None
+        }
+
+    g["pedido"] = {"por": "bot", "base": g["mao_valor"], "valor": proximo2}
+    request.session["truco"] = g
+    return {
+        "ok": True,
+        "mensagem": f"Bot aumentou pra {proximo2}! Aceita, corre ou aumenta?",
+        "placar": placar_list(g),
+        "mao_valor": g["mao_valor"],
+        "pedido": g["pedido"],
+        "manilha": g["manilha"],
+        "vez": g["vez"],
+        "fim_jogo": False,
+        "bot_iniciou": None
+    }
+
+
+# ----------------- AUMENTAR (USER responde pedido do BOT) -----------------
 
 @app.post("/api/truco/aumentar")
 def truco_aumentar(request: Request):
-    """
-    Usado quando o BOT pediu um valor e o USER quer aumentar (contra-pedir).
-    Ex: bot pediu 6, user aumenta pra 9.
-    """
-    g = request.session.get("truco")
-    if not g:
-        return JSONResponse({"ok": False, "erro": "Jogo não iniciado."}, status_code=400)
-    if g.get("finalizado"):
-        return JSONResponse({"ok": False, "erro": "Jogo finalizado."}, status_code=400)
+    ensure_truco(request)
+    g = request.session["truco"]
 
-    ped = g.get("pedido_pendente")
-    if not ped:
-        return JSONResponse({"ok": False, "erro": "Não há pedido pendente."}, status_code=400)
-    if ped.get("por") != "bot":
-        return JSONResponse({"ok": False, "erro": "Você só pode aumentar quando o bot pediu."}, status_code=400)
+    if g["pedido"] is None or g["pedido"]["por"] != "bot":
+        return JSONResponse({"ok": False, "erro": "Não há pedido do bot para aumentar."}, 400)
 
-    # Aceita o pedido atual do bot e pede o próximo
-    valor_atual_pedido = int(ped["valor"])
+    valor_atual_pedido = g["pedido"]["valor"]
     proximo = prox_valor(valor_atual_pedido)
     if not proximo:
-        return JSONResponse({"ok": False, "erro": "Não dá para aumentar além de 12."}, status_code=400)
+        return JSONResponse({"ok": False, "erro": "Não dá para aumentar mais."}, 400)
 
-    # mão passa a valer o valor que o bot pediu
-    g["mao_valor"] = valor_atual_pedido
+    acao = bot_responde_pedido(g, proximo)
 
-    # agora o user pede o próximo, e o bot responde
-    g["pedido_pendente"] = {"por": "user", "base": valor_atual_pedido, "valor": proximo}
-    return _bot_responder_pedido(request, g, base=valor_atual_pedido, valor_pedido=proximo)
+    if acao == "correr":
+        g["placar_user"] += valor_atual_pedido
+        g["pedido"] = None
 
+        if fim_de_jogo(g):
+            g["finalizado"] = True
+            request.session["truco"] = g
+            return {"ok": True, "fim_jogo": True, "placar": placar_list(g), "vez": g["vez"], "mensagem": mensagem_fim(g)}
+
+        iniciar_nova_mao(request, mao_inicial="user")
+        g2 = request.session["truco"]
+        bot_iniciou = bot_torna_se_precisar(g2)
+        request.session["truco"] = g2
+
+        return {
+            "ok": True,
+            "mensagem": f"Bot correu! Você ganhou {valor_atual_pedido} ponto(s).",
+            "nova_mao": True,
+            "vira": g2["vira"],
+            "mao_user": g2["mao_user"],
+            "placar": placar_list(g2),
+            "mao_valor": g2["mao_valor"],
+            "pedido": g2["pedido"],
+            "manilha": g2["manilha"],
+            "vez": g2["vez"],
+            "fim_jogo": False,
+            "bot_iniciou": bot_iniciou
+        }
+
+    if acao == "aceitar":
+        g["mao_valor"] = proximo
+        g["pedido"] = None
+
+        bot_card = bot_torna_se_precisar(g)
+        request.session["truco"] = g
+
+        return {
+            "ok": True,
+            "mensagem": f"Bot aceitou! Mão valendo {g['mao_valor']}.",
+            "placar": placar_list(g),
+            "mao_valor": g["mao_valor"],
+            "pedido": g["pedido"],
+            "manilha": g["manilha"],
+            "vez": g["vez"],
+            "fim_jogo": False,
+            "bot_iniciou": bot_card
+        }
+
+    proximo2 = prox_valor(proximo)
+    if not proximo2:
+        g["mao_valor"] = proximo
+        g["pedido"] = None
+        bot_card = bot_torna_se_precisar(g)
+        request.session["truco"] = g
+        return {
+            "ok": True,
+            "mensagem": f"Bot aceitou! Mão valendo {g['mao_valor']}.",
+            "placar": placar_list(g),
+            "mao_valor": g["mao_valor"],
+            "pedido": g["pedido"],
+            "manilha": g["manilha"],
+            "vez": g["vez"],
+            "fim_jogo": False,
+            "bot_iniciou": bot_card
+        }
+
+    g["pedido"] = {"por": "bot", "base": g["mao_valor"], "valor": proximo2}
+    request.session["truco"] = g
+    return {
+        "ok": True,
+        "mensagem": f"Bot aumentou pra {proximo2}! Aceita, corre ou aumenta?",
+        "placar": placar_list(g),
+        "mao_valor": g["mao_valor"],
+        "pedido": g["pedido"],
+        "manilha": g["manilha"],
+        "vez": g["vez"],
+        "fim_jogo": False,
+        "bot_iniciou": None
+    }
+
+
+# ----------------- ACEITAR (USER aceita pedido do BOT) -----------------
 
 @app.post("/api/truco/aceitar")
 def truco_aceitar(request: Request):
-    g = request.session.get("truco")
-    if not g:
-        return JSONResponse({"ok": False, "erro": "Jogo não iniciado."}, status_code=400)
-    if g.get("finalizado"):
-        return JSONResponse({"ok": False, "erro": "Jogo finalizado."}, status_code=400)
+    ensure_truco(request)
+    g = request.session["truco"]
 
-    ped = g.get("pedido_pendente")
-    if not ped:
-        return JSONResponse({"ok": False, "erro": "Não há pedido pendente."}, status_code=400)
+    if g["pedido"] is None or g["pedido"]["por"] != "bot":
+        return JSONResponse({"ok": False, "erro": "Não há pedido do bot para aceitar."}, 400)
 
-    g["mao_valor"] = int(ped["valor"])
-    g["pedido_pendente"] = None
+    g["mao_valor"] = g["pedido"]["valor"]
+    g["pedido"] = None
+
+    bot_card = bot_torna_se_precisar(g)
     request.session["truco"] = g
 
-    return JSONResponse({
+    return {
         "ok": True,
-        "acao": "aceitou",
         "mensagem": f"Aceito! Mão valendo {g['mao_valor']}.",
-        "placar": [g["placar_user"], g["placar_bot"]],
+        "placar": placar_list(g),
         "mao_valor": g["mao_valor"],
-        "pedido": None,
-    })
+        "pedido": g["pedido"],
+        "manilha": g["manilha"],
+        "vez": g["vez"],
+        "fim_jogo": False,
+        "bot_iniciou": bot_card
+    }
 
+
+# ----------------- CORRER (USER corre do pedido do BOT) -----------------
 
 @app.post("/api/truco/correr")
 def truco_correr(request: Request):
-    g = request.session.get("truco")
-    if not g:
-        return JSONResponse({"ok": False, "erro": "Jogo não iniciado."}, status_code=400)
-    if g.get("finalizado"):
-        return JSONResponse({"ok": False, "erro": "Jogo finalizado."}, status_code=400)
+    ensure_truco(request)
+    g = request.session["truco"]
 
-    ped = g.get("pedido_pendente")
-    if not ped:
-        return JSONResponse({"ok": False, "erro": "Não há pedido pendente."}, status_code=400)
+    if g["pedido"] is None or g["pedido"]["por"] != "bot":
+        return JSONResponse({"ok": False, "erro": "Não há pedido do bot para correr."}, 400)
 
-    base = int(ped["base"])
-    quem_pediu = ped["por"]  # "user" ou "bot"
+    base = g["pedido"]["base"]
+    g["placar_bot"] += base
+    g["pedido"] = None
 
-    # Quem correu entrega a mão: quem pediu ganha os pontos base
-    ganhador = quem_pediu
-    res = _aplicar_corrida(request, g, ganhador, base)
-    gg = res["g"]
+    if fim_de_jogo(g):
+        g["finalizado"] = True
+        request.session["truco"] = g
+        return {"ok": True, "fim_jogo": True, "placar": placar_list(g), "vez": g["vez"], "mensagem": mensagem_fim(g)}
 
-    msg = f"Você correu… {('Você' if ganhador=='user' else 'Bot')} ganhou {base} ponto(s)."
+    iniciar_nova_mao(request, mao_inicial="bot")
+    g2 = request.session["truco"]
+    bot_card = bot_torna_se_precisar(g2)
+    request.session["truco"] = g2
 
-    return JSONResponse({
+    return {
         "ok": True,
-        "acao": "correu",
-        "mensagem": msg,
-        "nova_mao": res["nova_mao"],
-        "fim_jogo": res["fim_jogo"],
-        "vira": gg.get("vira"),
-        "manilha": gg.get("manilha"),
-        "mao_user": gg.get("mao_user"),
-        "placar": [gg["placar_user"], gg["placar_bot"]],
-        "mao_valor": gg.get("mao_valor", 1),
-        "pedido": gg.get("pedido_pendente"),
-    })
+        "mensagem": f"Você correu! Bot ganhou {base} ponto(s).",
+        "nova_mao": True,
+        "vira": g2["vira"],
+        "mao_user": g2["mao_user"],
+        "placar": placar_list(g2),
+        "mao_valor": g2["mao_valor"],
+        "pedido": g2["pedido"],
+        "manilha": g2["manilha"],
+        "vez": g2["vez"],
+        "fim_jogo": False,
+        "bot_iniciou": bot_card
+    }
 
 
-# =========================
-# ✅ JOGAR CARTA
-# =========================
+# ----------------- JOGAR CARTA (USER) -----------------
 
 @app.post("/api/truco/play")
 async def truco_play(request: Request):
-    g = request.session.get("truco")
-    if not g:
-        return JSONResponse({"ok": False, "erro": "Jogo não iniciado."}, status_code=400)
-    if g.get("finalizado"):
-        return JSONResponse({"ok": False, "erro": "Jogo finalizado."}, status_code=400)
-    if g.get("pedido_pendente"):
-        return JSONResponse({"ok": False, "erro": "Responda ao pedido (aceitar/correr/aumentar) antes de jogar."}, status_code=400)
+    ensure_truco(request)
+    g = request.session["truco"]
+
+    if g["finalizado"] or fim_de_jogo(g):
+        g["finalizado"] = True
+        request.session["truco"] = g
+        return {"ok": True, "fim_jogo": True, "placar": placar_list(g), "vez": g["vez"], "mensagem": mensagem_fim(g)}
+
+    if g["pedido"] is not None:
+        return JSONResponse({"ok": False, "erro": "Responda ao pedido (Aceitar/Correr/Aumentar) antes de jogar."}, 400)
 
     body = await request.json()
     carta_user = body.get("carta")
 
+    if g["vez"] != "user":
+        return JSONResponse({"ok": False, "erro": "Espere o bot jogar."}, 400)
+
     if not carta_user or carta_user not in g["mao_user"]:
-        return JSONResponse({"ok": False, "erro": "Carta inválida."}, status_code=400)
+        return JSONResponse({"ok": False, "erro": "Carta inválida."}, 400)
 
-    carta_bot = random.choice(g["mao_bot"])
+    # ✅ define quem iniciou a rodada atual:
+    # - se o bot já tinha tornado (carta na mesa), iniciador = bot
+    # - senão, iniciador = user
+    rodada_iniciador = "bot" if g["carta_bot_mesa"] is not None else "user"
+    g["rodada_iniciador"] = rodada_iniciador
 
+    # 1) user joga
     g["mao_user"].remove(carta_user)
-    g["mao_bot"].remove(carta_bot)
 
-    g["jogadas_na_mao"] += 1
-    jogada_num = g["jogadas_na_mao"]
+    # 2) carta do bot
+    if g["carta_bot_mesa"] is not None:
+        carta_bot = g["carta_bot_mesa"]
+        g["carta_bot_mesa"] = None
+    else:
+        if not g["mao_bot"]:
+            return JSONResponse({"ok": False, "erro": "Bot sem carta disponível."}, 400)
+        carta_bot = bot_escolher_resposta(g["mao_bot"], carta_user, g["manilha"])
+        g["mao_bot"].remove(carta_bot)
 
+    # 3) resolve a rodada
     r = truco_comparar(carta_user, carta_bot, g["manilha"])
 
-    resultado_rodada = None
-    mostrar_maior = None
+    if r == 1:
+        g["tricks"].append("user")
+        vencedor_rodada = "user"
+    elif r == -1:
+        g["tricks"].append("bot")
+        vencedor_rodada = "bot"
+    else:
+        g["tricks"].append("tie")
+        vencedor_rodada = "tie"
 
-    # 1ª jogada
-    if jogada_num == 1:
-        if r == 1:
-            g["rodada_user"] += 1
-            g["vencedor_rodada1"] = "user"
-            resultado_rodada = "venceu"
-        elif r == -1:
-            g["rodada_bot"] += 1
-            g["vencedor_rodada1"] = "bot"
-            resultado_rodada = "perdeu"
-        else:
-            g["empate_rodada1"] = True
-            resultado_rodada = "empatou"
+    # 4) define quem "torna" a próxima rodada
+    if vencedor_rodada == "user":
+        g["vez"] = "user"
+    elif vencedor_rodada == "bot":
+        g["vez"] = "bot"
+    else:
+        # ✅ empate: mantém iniciador da rodada
+        g["vez"] = g["rodada_iniciador"]
 
-            maior_user = truco_maior_da_mao(g["mao_user"], g["manilha"])
-            maior_bot = truco_maior_da_mao(g["mao_bot"], g["manilha"])
+    # 5) verifica vencedor da mão
+    win = vencedor_da_mao(g["tricks"], g["mao_inicial"])
+    if win is not None:
+        if win == "user":
+            g["placar_user"] += g["mao_valor"]
+        elif win == "bot":
+            g["placar_bot"] += g["mao_valor"]
 
-            if maior_user and maior_bot:
-                c = truco_comparar(maior_user, maior_bot, g["manilha"])
-                if c == 1:
-                    g["vantagem_empate1"] = "user"
-                elif c == -1:
-                    g["vantagem_empate1"] = "bot"
-                else:
-                    g["vantagem_empate1"] = None
-
-            mostrar_maior = {
-                "user": maior_user,
-                "bot": maior_bot,
-                "vantagem": g["vantagem_empate1"]
+        if fim_de_jogo(g):
+            g["finalizado"] = True
+            request.session["truco"] = g
+            return {
+                "ok": True,
+                "sua_carta": carta_user,
+                "carta_bot": carta_bot,
+                "resultado_rodada": "venceu" if r == 1 else ("perdeu" if r == -1 else "empatou"),
+                "placar": placar_list(g),
+                "mao_valor": g["mao_valor"],
+                "pedido": g["pedido"],
+                "manilha": g["manilha"],
+                "vez": g["vez"],
+                "fim_jogo": True,
+                "mensagem": mensagem_fim(g),
+                "nova_mao": False,
+                "bot_iniciou": None
             }
 
-    # 2ª jogada
-    elif jogada_num == 2:
-        if g["empate_rodada1"] and r != 0:
-            if r == 1:
-                g["rodada_user"] += 1
-                resultado_rodada = "venceu"
-            else:
-                g["rodada_bot"] += 1
-                resultado_rodada = "perdeu"
-        else:
-            if r == 1:
-                g["rodada_user"] += 1
-                resultado_rodada = "venceu"
-            elif r == -1:
-                g["rodada_bot"] += 1
-                resultado_rodada = "perdeu"
-            else:
-                resultado_rodada = "empatou"
+        # ✅ quem ganhou a mão é mão na próxima
+        iniciar_nova_mao(request, mao_inicial=win)
+        g2 = request.session["truco"]
 
-    # 3ª jogada
-    else:
-        if r == 1:
-            g["rodada_user"] += 1
-            resultado_rodada = "venceu"
-        elif r == -1:
-            g["rodada_bot"] += 1
-            resultado_rodada = "perdeu"
-        else:
-            resultado_rodada = "empatou"
+        bot_iniciou = bot_torna_se_precisar(g2)  # se bot for mão, ele torna
+        request.session["truco"] = g2
 
-    # Encerramento da mão
-    mao_encerrada = False
-    vencedor_mao = None
+        return {
+            "ok": True,
+            "sua_carta": carta_user,
+            "carta_bot": carta_bot,
+            "resultado_rodada": "venceu" if r == 1 else ("perdeu" if r == -1 else "empatou"),
+            "placar": placar_list(g2),
+            "vira": g2["vira"],
+            "mao_user": g2["mao_user"],
+            "mao_valor": g2["mao_valor"],
+            "pedido": g2["pedido"],
+            "manilha": g2["manilha"],
+            "vez": g2["vez"],
+            "fim_jogo": False,
+            "nova_mao": True,
+            "bot_iniciou": bot_iniciou
+        }
 
-    if jogada_num == 2 and g["empate_rodada1"] and r != 0:
-        mao_encerrada = True
-        vencedor_mao = "user" if r == 1 else "bot"
+    # 6) se a próxima vez for do bot, ele torna automaticamente (ou pede truco)
+    bot_iniciou = None
+    if g["vez"] == "bot" and g["pedido"] is None and not g["finalizado"] and not fim_de_jogo(g):
+        bot_iniciou = bot_torna_se_precisar(g)
+        # se ele tornou, g["vez"] vira "user" e a carta fica na mesa
+        # se ele pediu truco, "pedido" fica preenchido e a vez permanece do bot aguardando sua resposta
 
-    elif jogada_num == 2 and r == 0:
-        if g["vencedor_rodada1"] in ("user", "bot"):
-            mao_encerrada = True
-            vencedor_mao = g["vencedor_rodada1"]
-        elif g["empate_rodada1"] and g["vantagem_empate1"] in ("user", "bot"):
-            mao_encerrada = True
-            vencedor_mao = g["vantagem_empate1"]
+    request.session["truco"] = g
 
-    elif g["rodada_user"] == 2 or g["rodada_bot"] == 2:
-        mao_encerrada = True
-        vencedor_mao = "user" if g["rodada_user"] == 2 else "bot"
-
-    elif g["jogadas_na_mao"] >= 3:
-        mao_encerrada = True
-        if g["rodada_user"] > g["rodada_bot"]:
-            vencedor_mao = "user"
-        elif g["rodada_bot"] > g["rodada_user"]:
-            vencedor_mao = "bot"
-        else:
-            vencedor_mao = None
-
-    nova_mao = False
-    fim_jogo = False
-
-    if mao_encerrada:
-        valor_mao = int(g.get("mao_valor", 1))
-
-        if vencedor_mao == "user":
-            g["placar_user"] += valor_mao
-        elif vencedor_mao == "bot":
-            g["placar_bot"] += valor_mao
-
-        if g["placar_user"] >= 12 or g["placar_bot"] >= 12:
-            g["finalizado"] = True
-            fim_jogo = True
-            request.session["truco"] = g
-        else:
-            novo = novo_estado()
-            novo["placar_user"] = g["placar_user"]
-            novo["placar_bot"] = g["placar_bot"]
-            request.session["truco"] = novo
-            g = novo
-            nova_mao = True
-
-    # Bot pode pedir aumento (às vezes) durante a mão
-    if (not fim_jogo) and (not nova_mao) and (not g.get("pedido_pendente")):
-        # chance pequena de pedir quando a mão ainda não acabou
-        atual = int(g.get("mao_valor", 1))
-        nxt = prox_valor(atual)
-        if nxt and g.get("jogadas_na_mao", 0) in (1, 2):
-            forca = _truco_avaliar_forca_bot(g)
-            chance = 0.08 + (forca * 0.16)  # ajuste se quiser
-            if random.random() < chance:
-                g["pedido_pendente"] = {"por": "bot", "base": atual, "valor": nxt}
-                request.session["truco"] = g
-
-    return JSONResponse({
+    return {
         "ok": True,
         "sua_carta": carta_user,
         "carta_bot": carta_bot,
-        "resultado_rodada": resultado_rodada,
-        "mostrar_maior": mostrar_maior,
-
-        "vira": g["vira"],
+        "resultado_rodada": "venceu" if r == 1 else ("perdeu" if r == -1 else "empatou"),
+        "placar": placar_list(g),
+        "mao_valor": g["mao_valor"],
+        "pedido": g["pedido"],
         "manilha": g["manilha"],
-        "mao_user": g["mao_user"],
-        "placar": [g["placar_user"], g["placar_bot"]],
-
-        "mao_valor": g.get("mao_valor", 1),
-        "pedido": g.get("pedido_pendente"),
-
-        "nova_mao": nova_mao,
-        "fim_jogo": fim_jogo,
-    })
+        "vez": g["vez"],
+        "fim_jogo": False,
+        "nova_mao": False,
+        "bot_iniciou": bot_iniciou
+    }

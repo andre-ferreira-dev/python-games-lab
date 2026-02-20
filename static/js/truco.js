@@ -5,6 +5,7 @@ const cartaUserSlot = document.getElementById("cartaUser");
 const resultado = document.getElementById("resultado");
 const pUser = document.getElementById("pUser");
 const pBot = document.getElementById("pBot");
+const mesaEl = document.getElementById("mesa");
 
 const btnNovo = document.getElementById("btnNovo");
 const btnTruco = document.getElementById("btnTruco");
@@ -12,10 +13,11 @@ const btnAceitar = document.getElementById("btnAceitar");
 const btnCorrer = document.getElementById("btnCorrer");
 const maoValorTxt = document.getElementById("maoValorTxt");
 
+const manilhaTxt = document.getElementById("manilhaTxt");
+const controle = document.getElementById("controle");
+
 let bloqueado = false;
 let timerFimMao = null;
-
-// ✅ controla quando o jogo já começou (cartas já foram distribuídas)
 let jogoIniciado = false;
 
 const TEMPO_SUMIR_MAO = 280;
@@ -31,9 +33,20 @@ function proxValor(v) {
   return i >= 0 && i < ESCADA.length - 1 ? ESCADA[i + 1] : null;
 }
 
+/**
+ * Pré-jogo: controle centralizado.
+ * Jogo rodando: controle no canto inferior direito.
+ */
+function setModoJogo(rodando) {
+  if (!mesaEl) return;
+  mesaEl.classList.toggle("pre-game", !rodando);
+}
+
 let estado = {
   mao_valor: 1,
-  pedido: null, // {por:"bot"/"user", base, valor}
+  pedido: null,
+  manilha: null,
+  vez: "user",
 };
 
 function renderCarta(slot, carta) {
@@ -52,13 +65,19 @@ function setPlacar(arr) {
 
 function renderMao(cartas) {
   mao.innerHTML = "";
-  cartas.forEach(carta => {
+  cartas.forEach((carta) => {
     const botao = document.createElement("button");
     botao.className = "card";
     botao.type = "button";
     botao.innerHTML = `<img src="/img/img-truco/${carta}.png" alt="${carta}">`;
     botao.onclick = () => jogarCarta(botao, carta);
     mao.appendChild(botao);
+  });
+}
+
+function setMaoDisabled(disabled) {
+  [...mao.querySelectorAll("button.card")].forEach((btn) => {
+    btn.disabled = disabled;
   });
 }
 
@@ -72,13 +91,20 @@ function cancelarTimerFimMao() {
 function setEstadoTruco(d) {
   estado.mao_valor = d.mao_valor ?? estado.mao_valor;
   estado.pedido = d.pedido ?? null;
+  estado.manilha = d.manilha ?? estado.manilha;
+  estado.vez = d.vez ?? estado.vez;
+
   maoValorTxt.textContent = `Mão valendo ${estado.mao_valor}`;
+  manilhaTxt.textContent = `Manilha: ${estado.manilha || "-"}`;
+
+  const deveTravar = !!estado.pedido || estado.vez !== "user";
+  controle.classList.toggle("pedido", !!estado.pedido);
+  setMaoDisabled(deveTravar);
 
   atualizarBotoes();
 }
 
 function atualizarBotoes() {
-  // ✅ Antes de iniciar o jogo, NÃO mostra truco/aceitar/correr
   if (!jogoIniciado) {
     btnTruco.style.display = "none";
     btnAceitar.style.display = "none";
@@ -88,7 +114,6 @@ function atualizarBotoes() {
 
   const ped = estado.pedido;
 
-  // ✅ Se há pedido pendente
   if (ped) {
     btnAceitar.style.display = "inline-block";
     btnCorrer.style.display = "inline-block";
@@ -99,14 +124,11 @@ function atualizarBotoes() {
       btnTruco.textContent = proximo ? `Aumentar pra ${proximo}` : "Aumentar";
       btnTruco.disabled = !proximo;
     } else {
-      // pedido feito pelo user (raro ficar pendente)
       btnTruco.style.display = "none";
     }
-
     return;
   }
 
-  // ✅ Sem pedido pendente: pode pedir aumento (se tiver próximo)
   btnAceitar.style.display = "none";
   btnCorrer.style.display = "none";
 
@@ -114,6 +136,17 @@ function atualizarBotoes() {
   btnTruco.style.display = "inline-block";
   btnTruco.textContent = proximo ? `Pedir ${proximo}` : "Máximo";
   btnTruco.disabled = !proximo;
+}
+
+function mostrarBotTornou(carta) {
+  if (!carta) return;
+
+  // ✅ limpa as cartas da rodada anterior (principalmente a sua carta)
+  limparMesa();
+
+  // ✅ agora mostra a carta que o bot tornou
+  cartaBotSlot.innerHTML = `<img src="/img/img-truco/${carta}.png" alt="${carta}">`;
+  resultado.textContent = "Bot tornou — responda com uma carta";
 }
 
 async function novoJogo() {
@@ -129,26 +162,32 @@ async function novoJogo() {
     resultado.textContent = "Distribuindo cartas...";
 
     const r = await fetch("/api/truco/new");
-    if (!r.ok) throw new Error("Falha ao iniciar novo jogo");
-
     const d = await r.json();
+
+    if (!r.ok || !d.ok) {
+      resultado.textContent = d?.erro || "Falha ao iniciar novo jogo.";
+      jogoIniciado = false;
+      setModoJogo(false);
+      atualizarBotoes();
+      bloqueado = false;
+      btnNovo.disabled = false;
+      return;
+    }
 
     renderCarta(viraSlot, d.vira);
     setPlacar(d.placar);
     renderMao(d.mao_user);
 
-    // ✅ agora o jogo começou (cartas já foram dadas)
     jogoIniciado = true;
-
+    setModoJogo(true);
     setEstadoTruco(d);
-    resultado.textContent = "Escolha uma carta";
+
+    resultado.textContent = estado.vez === "user" ? "Escolha uma carta" : "Aguarde o bot jogar...";
   } catch (err) {
     console.error(err);
-
-    // ✅ se der erro, volta pro estado inicial (não mostra truco)
     jogoIniciado = false;
+    setModoJogo(false);
     atualizarBotoes();
-
     resultado.textContent = "Erro ao iniciar o jogo. Tente novamente.";
   } finally {
     bloqueado = false;
@@ -158,15 +197,21 @@ async function novoJogo() {
 
 async function pedirOuAumentar() {
   if (bloqueado) return;
+
   cancelarTimerFimMao();
   bloqueado = true;
 
   try {
-    // ✅ Se há pedido do bot, user aumenta
+    // Se bot pediu, o botão vira "Aumentar"
     if (estado.pedido && estado.pedido.por === "bot") {
       const r = await fetch("/api/truco/aumentar", { method: "POST" });
       const d = await r.json();
-      if (!r.ok || !d.ok) throw new Error(d.erro || "Falha ao aumentar");
+
+      if (!r.ok || !d.ok) {
+        resultado.textContent = d?.erro || "Falha ao aumentar.";
+        bloqueado = false;
+        return;
+      }
 
       if (d.mensagem) resultado.textContent = d.mensagem;
 
@@ -174,10 +219,13 @@ async function pedirOuAumentar() {
         limparMesa();
         renderCarta(viraSlot, d.vira);
         renderMao(d.mao_user);
+        setModoJogo(true);
       }
 
       setPlacar(d.placar);
       setEstadoTruco(d);
+
+      if (d.bot_iniciou) mostrarBotTornou(d.bot_iniciou);
 
       if (d.fim_jogo) {
         const u = Number(d.placar[0]);
@@ -191,10 +239,21 @@ async function pedirOuAumentar() {
       return;
     }
 
-    // ✅ Senão, user pede
+    // Pedido normal (user)
+    if (estado.vez !== "user") {
+      resultado.textContent = "Você só pode pedir truco na sua vez.";
+      bloqueado = false;
+      return;
+    }
+
     const r = await fetch("/api/truco/pedir", { method: "POST" });
     const d = await r.json();
-    if (!r.ok || !d.ok) throw new Error(d.erro || "Falha ao pedir");
+
+    if (!r.ok || !d.ok) {
+      resultado.textContent = d?.erro || "Falha ao pedir.";
+      bloqueado = false;
+      return;
+    }
 
     if (d.mensagem) resultado.textContent = d.mensagem;
 
@@ -202,10 +261,13 @@ async function pedirOuAumentar() {
       limparMesa();
       renderCarta(viraSlot, d.vira);
       renderMao(d.mao_user);
+      setModoJogo(true);
     }
 
     setPlacar(d.placar);
     setEstadoTruco(d);
+
+    if (d.bot_iniciou) mostrarBotTornou(d.bot_iniciou);
 
     if (d.fim_jogo) {
       const u = Number(d.placar[0]);
@@ -225,17 +287,26 @@ async function pedirOuAumentar() {
 
 async function aceitarPedido() {
   if (bloqueado) return;
+
   cancelarTimerFimMao();
   bloqueado = true;
 
   try {
     const r = await fetch("/api/truco/aceitar", { method: "POST" });
     const d = await r.json();
-    if (!r.ok || !d.ok) throw new Error(d.erro || "Falha ao aceitar");
+
+    if (!r.ok || !d.ok) {
+      resultado.textContent = d?.erro || "Erro ao aceitar.";
+      bloqueado = false;
+      return;
+    }
 
     if (d.mensagem) resultado.textContent = d.mensagem;
     setPlacar(d.placar);
     setEstadoTruco(d);
+
+    if (d.bot_iniciou) mostrarBotTornou(d.bot_iniciou);
+    else resultado.textContent = estado.vez === "user" ? "Escolha uma carta" : "Aguarde o bot jogar...";
 
     bloqueado = false;
   } catch (err) {
@@ -247,13 +318,19 @@ async function aceitarPedido() {
 
 async function correrPedido() {
   if (bloqueado) return;
+
   cancelarTimerFimMao();
   bloqueado = true;
 
   try {
     const r = await fetch("/api/truco/correr", { method: "POST" });
     const d = await r.json();
-    if (!r.ok || !d.ok) throw new Error(d.erro || "Falha ao correr");
+
+    if (!r.ok || !d.ok) {
+      resultado.textContent = d?.erro || "Erro ao correr.";
+      bloqueado = false;
+      return;
+    }
 
     if (d.mensagem) resultado.textContent = d.mensagem;
 
@@ -261,10 +338,13 @@ async function correrPedido() {
       limparMesa();
       renderCarta(viraSlot, d.vira);
       renderMao(d.mao_user);
+      setModoJogo(true);
     }
 
     setPlacar(d.placar);
     setEstadoTruco(d);
+
+    if (d.bot_iniciou) mostrarBotTornou(d.bot_iniciou);
 
     if (d.fim_jogo) {
       const u = Number(d.placar[0]);
@@ -285,9 +365,13 @@ async function correrPedido() {
 async function jogarCarta(botao, carta) {
   if (bloqueado) return;
 
-  // ✅ Se há pedido pendente, não deixa jogar
   if (estado.pedido) {
     resultado.textContent = "Responda ao pedido (Aceitar/Correr/Aumentar) antes de jogar.";
+    return;
+  }
+
+  if (estado.vez !== "user") {
+    resultado.textContent = "Aguarde o bot jogar...";
     return;
   }
 
@@ -307,11 +391,16 @@ async function jogarCarta(botao, carta) {
     const r = await fetch("/api/truco/play", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ carta })
+      body: JSON.stringify({ carta }),
     });
 
     const d = await r.json();
-    if (!r.ok || !d.ok) throw new Error(d.erro || "Falha ao jogar carta");
+
+    if (!r.ok) {
+      resultado.textContent = d?.erro || "Falha ao jogar carta.";
+      bloqueado = false;
+      return;
+    }
 
     setEstadoTruco(d);
 
@@ -322,13 +411,9 @@ async function jogarCarta(botao, carta) {
     setTimeout(() => {
       setPlacar(d.placar);
 
-      if (d.resultado_rodada === "empatou") {
-        resultado.textContent = "Rodada empatada";
-      } else {
-        resultado.textContent = `Você ${d.resultado_rodada} a rodada`;
-      }
+      if (d.resultado_rodada === "empatou") resultado.textContent = "Rodada empatada";
+      else resultado.textContent = `Você ${d.resultado_rodada} a rodada`;
 
-      // ✅ se bot pediu aumento no fim da jogada
       if (d.pedido && d.pedido.por === "bot") {
         resultado.textContent = `Bot pediu ${d.pedido.valor}! Aceita, corre ou aumenta?`;
       }
@@ -344,20 +429,20 @@ async function jogarCarta(botao, carta) {
       }
 
       if (d.nova_mao) {
-        if (d.resultado_rodada === "empatou") {
-          resultado.textContent = "Empatou! Escolha uma carta";
-        } else {
-          resultado.textContent = `Você ${d.resultado_rodada}! Escolha uma carta`;
-        }
-
+        resultado.textContent = "Nova mão! Escolha uma carta";
         limparMesa();
         renderCarta(viraSlot, d.vira);
         renderMao(d.mao_user);
-
-        // ✅ nova mão continua iniciada, então o botão Truco pode aparecer
         jogoIniciado = true;
+        setModoJogo(true);
         atualizarBotoes();
+        bloqueado = false;
+        return;
+      }
 
+      // ✅ Se o bot tornou automaticamente, a carta vem em bot_iniciou
+      if (d.bot_iniciou) {
+        mostrarBotTornou(d.bot_iniciou);
         bloqueado = false;
         return;
       }
@@ -369,18 +454,23 @@ async function jogarCarta(botao, carta) {
           return;
         }
 
-        resultado.textContent = "Escolha uma carta";
+        resultado.textContent = estado.vez === "user" ? "Escolha uma carta" : "Aguarde o bot jogar...";
         bloqueado = false;
       } else {
         resultado.textContent = "Clique em “Novo jogo”";
-        bloqueado = true;
+        jogoIniciado = false;
+        setModoJogo(false);
+        atualizarBotoes();
+        bloqueado = false;
       }
     }, DELAY_SEGURAR_CARTAS_NA_MESA);
-
   } catch (err) {
     console.error(err);
     resultado.textContent = "Erro ao jogar. Clique em “Novo jogo”.";
-    bloqueado = true;
+    jogoIniciado = false;
+    setModoJogo(false);
+    atualizarBotoes();
+    bloqueado = false;
   }
 }
 
@@ -389,5 +479,6 @@ btnTruco.addEventListener("click", pedirOuAumentar);
 btnAceitar.addEventListener("click", aceitarPedido);
 btnCorrer.addEventListener("click", correrPedido);
 
-// ✅ Estado inicial dos botões (antes do novo jogo)
+// Estado inicial: pré-jogo (controle central)
+setModoJogo(false);
 atualizarBotoes();
